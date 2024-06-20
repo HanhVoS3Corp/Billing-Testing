@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alanvo.test.googlebilling.common.theme.TestBillingTheme
 import com.alanvo.test.googlebilling.features.billingClient.BillingHelper
 import com.alanvo.test.googlebilling.features.billingClient.BillingHelper.Companion.SINGLE_PROGRAM_ID
+import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.Purchase
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -61,7 +62,8 @@ class MainActivity : FragmentActivity() {
                         modifier = Modifier.padding(innerPadding),
                     ) {
                         BillingHelper.instance.purchase(
-                            sku = SINGLE_PROGRAM_ID,
+                            productType = BillingClient.ProductType.INAPP,
+                            productId = SINGLE_PROGRAM_ID,
                             activity = this@MainActivity,
                             callback = billingCallback,
                         )

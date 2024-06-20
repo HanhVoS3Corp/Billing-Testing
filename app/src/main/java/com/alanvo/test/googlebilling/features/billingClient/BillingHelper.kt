@@ -3,6 +3,7 @@ package com.alanvo.test.googlebilling.features.billingClient
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
@@ -105,6 +106,8 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
                     productDetailsList.forEach { productDetails ->
                         printProductDetails(productDetails)
                     }
+
+
                 }
             }
 
@@ -146,62 +149,57 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         }
     }
 
-    fun purchase(sku: String, activity: FragmentActivity, callback: BillingCallback) {
-        billingCallback = callback
-
-        val skuList = ArrayList<String>()
-        skuList.add(sku)
-        val params = SkuDetailsParams.newBuilder()
-        var type = BillingClient.SkuType.SUBS
-        if (sku == SKU_UNLIMITED || sku == SKU_UNLIMITED_SALE
-            || sku == SKU_ANNUAL_TO_UNLIMITED || sku == SKU_MONTHLY_TO_UNLIMITED
-        ) {
-            type = BillingClient.SkuType.INAPP
-        }
-        params.setSkusList(skuList).setType(type)
-        billingClient?.querySkuDetailsAsync(
-            params.build()
-        ) { billingResult, detailsList ->
-            Log.d("TestAlan", billingResult.responseCode.toString())
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && !detailsList.isNullOrEmpty()) {
-                val flowParams = BillingFlowParams.newBuilder()
-                    .setSkuDetails(detailsList.first())
-                    .build()
-                billingClient?.launchBillingFlow(activity, flowParams)
-                lastSkuDetails = detailsList.firstOrNull()
-            } else if (billingResult.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) {
-                billingCallback?.onFailure("Purchase failed. Please contact support for help")
-            }
-        }
-    }
-
-    fun purchase(productId: String, activity: Activity, callback: BillingCallback) {
-        billingCallback = callback
-
-        val productDetailsParamsList = listOf(
-            BillingFlowParams.ProductDetailsParams.newBuilder()
-                // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
-                .setProductDetails(productDetails)
-                // For One-time product, "setOfferToken" method shouldn't be called.
-                // For subscriptions, to get an offer token, call ProductDetails.subscriptionOfferDetails()
-                // for a list of offers that are available to the user
-                .setOfferToken(selectedOfferToken)
+    fun purchase(productType: String, productId: String, activity: Activity, callback: BillingCallback) {
+        scope.launch {
+            billingCallback = callback
+            val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
+                .setProductList(
+                    listOf(
+                        QueryProductDetailsParams.Product.newBuilder()
+                            .setProductId(productId)
+                            .setProductType(productType)
+                            .build()
+                    )
+                )
                 .build()
-        )
 
+            val productDetailsResult: ProductDetailsResult? = withContext(Dispatchers.IO) {
+                billingClient?.queryProductDetails(queryProductDetailsParams)
+            }
 
-        billingClient?.querySkuDetailsAsync(
-            params.build()
-        ) { billingResult, detailsList ->
-            Log.d("TestAlan", billingResult.responseCode.toString())
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && !detailsList.isNullOrEmpty()) {
-                val flowParams = BillingFlowParams.newBuilder()
-                    .setSkuDetails(detailsList.first())
-                    .build()
-                billingClient?.launchBillingFlow(activity, flowParams)
-                lastSkuDetails = detailsList.firstOrNull()
-            } else if (billingResult.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) {
-                billingCallback?.onFailure("Purchase failed. Please contact support for help")
+            val productDetailsList: List<ProductDetails>? = productDetailsResult?.productDetailsList
+
+            when (val responseCode = productDetailsResult?.billingResult?.responseCode) {
+                BillingClient.BillingResponseCode.OK -> {
+                    Log.d("TestAlan", "queryProducts - result ok")
+                    if (productDetailsList?.isNotEmpty() == true) {
+                        val productDetailsParamsList = mutableListOf<BillingFlowParams.ProductDetailsParams>()
+                        productDetailsList.forEach { productDetails ->
+                            printProductDetails(productDetails)
+
+                            productDetailsParamsList.add(
+                                BillingFlowParams.ProductDetailsParams.newBuilder()
+                                    // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
+                                    .setProductDetails(productDetails)
+                                    .build()
+                            )
+                        }
+
+                        val billingFlowParams = BillingFlowParams.newBuilder()
+                            .setProductDetailsParamsList(productDetailsParamsList)
+                            .build()
+
+                        billingClient?.launchBillingFlow(activity, billingFlowParams)
+                    } else {
+                        Toast.makeText(activity, "Can not get information of this purchase", Toast.LENGTH_LONG).show()
+                    }
+                }
+
+                else -> {
+                    Log.d("TestAlan", "queryProducts - response is not ok ${responseCode?.toBillingMsg()}")
+                    Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${productDetailsResult?.billingResult?.debugMessage}")
+                    Toast.makeText(activity, "Purchase failed. Please contact support for help", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -215,36 +213,6 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
                     if (checkPurchaseStatusIsOk(purchase)) {
                         checkAcknowledgeStatus(purchase, billingClient)
                     }
-                }
-            }
-        }
-    }
-
-    fun abc() {
-        billingClient?.let {
-            val product1 =
-                QueryProductDetailsParams.Product.newBuilder()
-                    .setProductId(SKU_ANNUAL)
-                    .setProductType(BillingClient.ProductType.INAPP)
-                    .build()
-            val product2 =
-                QueryProductDetailsParams.Product.newBuilder()
-                    .setProductId(SKU_SIX_MONTHLY)
-                    .setProductType(BillingClient.ProductType.INAPP)
-                    .build()
-            val queryProductDetailsParams =
-                QueryProductDetailsParams.newBuilder()
-                    .setProductList(
-                        arrayListOf(product1, product2)
-                    )
-                    .build()
-
-            it.queryProductDetailsAsync(queryProductDetailsParams) { billingResult, productDetailsList: MutableList<ProductDetails> ->
-                // check billingResult
-                // process returned productDetailsList
-                Log.d("TestAlan", "billingResult $billingResult")
-                productDetailsList.forEach { details ->
-                    details.subscriptionOfferDetails
                 }
             }
         }
@@ -328,15 +296,5 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         val instance: BillingHelper by lazy { BillingHelper() }
 
         const val SINGLE_PROGRAM_ID = "com.vnhanh.testing.program.single"
-
-        fun isSpringSale(): Boolean {
-            val startDateStr = "26/11/2021" // "26/04/2021"
-            val endDateStr = "30/11/2021" // midnight 2nd may "03/05/2021"
-            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-            val minDate = sdf.parse(startDateStr)
-            val maxDate = sdf.parse(endDateStr)
-            val now = Date()
-            return (now > minDate && now < maxDate)
-        }
     }
 }

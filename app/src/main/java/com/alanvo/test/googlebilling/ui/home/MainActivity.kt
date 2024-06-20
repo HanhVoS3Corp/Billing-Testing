@@ -3,6 +3,7 @@ package com.alanvo.test.googlebilling.ui.home
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -29,12 +30,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alanvo.test.googlebilling.common.theme.TestBillingTheme
 import com.alanvo.test.googlebilling.features.billingClient.BillingHelper
 import com.alanvo.test.googlebilling.features.billingClient.BillingHelper.Companion.SINGLE_PROGRAM_ID
+import com.alanvo.test.googlebilling.features.billingClient.BillingHelper.Companion.SUBSCRIPTION_TYPE_01
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.Purchase
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class MainActivity : FragmentActivity() {
+class MainActivity : ComponentActivity() {
     private val viewModel: HomeViewModel by viewModels()
 
     private val billingCallback = object : BillingHelper.BillingCallback {
@@ -64,7 +66,6 @@ class MainActivity : FragmentActivity() {
                         BillingHelper.instance.purchase(
                             productType = BillingClient.ProductType.INAPP,
                             productId = SINGLE_PROGRAM_ID,
-                            activity = this@MainActivity,
                             callback = billingCallback,
                         )
                     }
@@ -97,7 +98,7 @@ class MainActivity : FragmentActivity() {
         ) {
             Text(
                 text = "Hello $name!",
-                style = TextStyle(color = if (isReady) Color.Black else Color.White),
+                style = TextStyle(color = if (isReady) Color.White else Color.Black),
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
                     .background(color = if (isReady) Color.Blue else Color.Gray)

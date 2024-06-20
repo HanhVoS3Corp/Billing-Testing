@@ -7,7 +7,6 @@ import android.widget.Toast
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
-import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.ProductDetailsResult
@@ -16,6 +15,8 @@ import com.android.billingclient.api.PurchasesResult
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
+import com.android.billingclient.api.SkuDetails
+import com.android.billingclient.api.SkuDetailsParams
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchasesAsync
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
 
 class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
     private val scope = CoroutineScope(Job())
@@ -56,19 +58,19 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         when (val responseCode = result.responseCode) {
             BillingClient.BillingResponseCode.OK -> {
                 scope.launch {
-                    queryProducts(
-                        productType = BillingClient.ProductType.INAPP,
-                        productId = SINGLE_PROGRAM_ID,
-                    )
-                    queryPurchases(
-                        productType = BillingClient.ProductType.INAPP,
-                    )
                     _readyState.update { true }
+//                    queryProducts(
+//                        productType = BillingClient.ProductType.INAPP,
+//                        productId = SINGLE_PROGRAM_ID,
+//                    )
+//                    queryPurchases(
+//                        productType = BillingClient.ProductType.INAPP,
+//                    )
                 }
             }
 
             else -> {
-                Log.d("TestAlan", "onBillingSetupFinished - responseCode: $responseCode - failed case")
+                Log.d("TestAlan", "onBillingSetupFinished - responseCode: ${responseCode.toBillingMsg()} - failed case")
                 _readyState.update { false }
             }
         }
@@ -142,95 +144,89 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         }
     }
 
-    fun purchase(productType: String, productId: String, activity: Activity, callback: BillingCallback) {
+//    fun purchase(productType: String, productId: String, activity: Activity, callback: BillingCallback) {
+//        scope.launch {
+//            billingCallback = callback
+//            val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
+//                .setProductList(
+//                    listOf(
+//                        QueryProductDetailsParams.Product.newBuilder()
+//                            .setProductId(productId)
+//                            .setProductType(productType)
+//                            .build()
+//                    )
+//                )
+//                .build()
+//            Log.d("TestAlan", "purchase")
+//            billingClient?.queryProductDetailsAsync(queryProductDetailsParams) { billingResult: BillingResult, productDetailsList: MutableList<ProductDetails> ->
+//
+//                when (val responseCode = billingResult.responseCode) {
+//                    BillingClient.BillingResponseCode.OK -> {
+//                        Log.d("TestAlan", "queryProducts - result ok $productDetailsList")
+//                        if (productDetailsList.isNotEmpty()) {
+//                            val productDetailsParamsList = mutableListOf<BillingFlowParams.ProductDetailsParams>()
+//                            productDetailsList.forEach { productDetails ->
+//                                printProductDetails(productDetails)
+//
+//                                productDetailsParamsList.add(
+//                                    BillingFlowParams.ProductDetailsParams.newBuilder()
+//                                        // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
+//                                        .setProductDetails(productDetails)
+//                                        .build()
+//                                )
+//                            }
+//
+//                            val billingFlowParams = BillingFlowParams.newBuilder()
+//                                .setProductDetailsParamsList(productDetailsParamsList)
+//                                .build()
+//
+//                            billingClient?.launchBillingFlow(activity, billingFlowParams)
+//                        } else {
+//                            Log.d("TestAlan", "queryProducts - Can not get information of this purchase")
+//                            Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult.debugMessage}")
+//                        }
+//                    }
+//
+//                    else -> {
+//                        Log.d("TestAlan", "queryProducts - response is not ok ${responseCode.toBillingMsg()}")
+//                        Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult.debugMessage}")
+//                    }
+//                }
+//            }
+//        }
+//    }
+
+    fun purchase(productType: String, productId: String,  callback: BillingCallback) {
         scope.launch {
             billingCallback = callback
-            val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
-                .setProductList(
-                    listOf(
-                        QueryProductDetailsParams.Product.newBuilder()
-                            .setProductId(productId)
-                            .setProductType(productType)
-                            .build()
-                    )
-                )
-                .build()
-
-            val productDetailsResult: ProductDetailsResult? = withContext(Dispatchers.IO) {
-                billingClient?.queryProductDetails(queryProductDetailsParams)
-            }
-
-            val productDetailsList: List<ProductDetails>? = productDetailsResult?.productDetailsList
-
-            when (val responseCode = productDetailsResult?.billingResult?.responseCode) {
-                BillingClient.BillingResponseCode.OK -> {
-                    Log.d("TestAlan", "queryProducts - result ok")
-                    if (productDetailsList?.isNotEmpty() == true) {
-                        val productDetailsParamsList = mutableListOf<BillingFlowParams.ProductDetailsParams>()
-                        productDetailsList.forEach { productDetails ->
-                            printProductDetails(productDetails)
-
-                            productDetailsParamsList.add(
-                                BillingFlowParams.ProductDetailsParams.newBuilder()
-                                    // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
-                                    .setProductDetails(productDetails)
-                                    .build()
-                            )
-                        }
-
-                        val billingFlowParams = BillingFlowParams.newBuilder()
-                            .setProductDetailsParamsList(productDetailsParamsList)
-                            .build()
-
-                        billingClient?.launchBillingFlow(activity, billingFlowParams)
-                    } else {
-                        Toast.makeText(activity, "Can not get information of this purchase", Toast.LENGTH_LONG).show()
-                    }
-                }
-
-                else -> {
-                    Log.d("TestAlan", "queryProducts - response is not ok ${responseCode?.toBillingMsg()}")
-                    Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${productDetailsResult?.billingResult?.debugMessage}")
-                    Toast.makeText(activity, "Purchase failed. Please contact support for help", Toast.LENGTH_LONG).show()
+            val skuList: MutableList<String> = ArrayList()
+            skuList.add(productId)
+            val params = SkuDetailsParams.newBuilder()
+            params.setSkusList(skuList).setType(productType)
+            billingClient?.querySkuDetailsAsync(
+                params.build()
+            ) { billingResult1: BillingResult, skuDetailsList: List<SkuDetails>? ->
+                // Process the result.
+                if (billingResult1.responseCode == BillingClient.BillingResponseCode.OK && skuDetailsList != null) {
+//                    for (skuDetailsObject in skuDetailsList) {
+//                        val skuDetails = skuDetailsObject as SkuDetails
+//                        val sku: String = skuDetails.getSku()
+//                        val price: String = skuDetails.getPrice()
+//
+//                    }
+                    Log.d("TestAlan", "queryProducts - result ok - list.size ${skuDetailsList.size}")
+                } else {
+                    Log.d("TestAlan", "queryProducts - response is not ok ${billingResult1.responseCode.toBillingMsg()}")
+                    Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult1.debugMessage}")
                 }
             }
         }
-    }
-
-    fun restore(skuType: String, callback: BillingCallback) {
-        billingClient?.let { billingClient ->
-            billingCallback = callback
-            billingClient.queryPurchasesAsync(skuType) { _, purchasesList ->
-                if (purchasesList.isEmpty()) billingCallback?.onFailure("You do not have any purchases")
-                for (purchase in purchasesList) {
-                    if (checkPurchaseStatusIsOk(purchase)) {
-                        checkAcknowledgeStatus(purchase, billingClient)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun checkAcknowledgeStatus(purchase: Purchase, billingClient: BillingClient) {
-        if (purchase.isAcknowledged) billingCallback?.onSuccess(purchase)
-        else getPurchaseAcknowledged(purchase, billingClient)
     }
 
     private fun getPurchaseAcknowledged(purchase: Purchase, billingClient: BillingClient) {
         val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder()
             .setPurchaseToken(purchase.purchaseToken).build()
         billingClient.acknowledgePurchase(acknowledgePurchaseParams) { billingCallback?.onSuccess(purchase) }
-    }
-
-    private fun checkPurchaseStatusIsOk(purchase: Purchase): Boolean {
-        return if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED
-            || purchase.purchaseState == Purchase.PurchaseState.PENDING
-        ) {
-            true
-        } else {
-            billingCallback?.onFailure("Restore failed. Please contact support for help")
-            false
-        }
     }
 
     // acknowledge: https://stackoverflow.com/questions/56289258/how-does-acknowledgepurchase-really-work-on-android
@@ -288,6 +284,7 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
     companion object {
         val instance: BillingHelper by lazy { BillingHelper() }
 
-        const val SINGLE_PROGRAM_ID = "com.vnhanh.testing.program.single"
+        const val SINGLE_PROGRAM_ID = "com.alanvo.test.googlebilling.single.program"
+        const val SUBSCRIPTION_TYPE_01 = "com.alanvo.test.googlebilling.sub1"
     }
 }

@@ -7,14 +7,24 @@ plugins {
 
 android {
     namespace = "com.alanvo.test.googlebilling"
+
+    signingConfigs {
+        create("release") {
+            keyAlias = "billingtesting"
+            keyPassword = "BillingTesting"
+            storeFile = file("../key")
+            storePassword = "BillingTesting"
+        }
+    }
+
     compileSdk = 34
 
     defaultConfig {
         applicationId = "com.alanvo.test.googlebilling"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -25,6 +35,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -1,5 +1,6 @@
 package com.alanvo.test.googlebilling.features.billingClient
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
@@ -8,59 +9,141 @@ import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
-import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
+import com.android.billingclient.api.ProductDetailsResult
 import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.PurchasesResult
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
 import com.android.billingclient.api.SkuDetails
 import com.android.billingclient.api.SkuDetailsParams
+import com.android.billingclient.api.queryProductDetails
+import com.android.billingclient.api.queryPurchasesAsync
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
-    val scope = CoroutineScope(Job())
+    private val scope = CoroutineScope(Job())
+    private val _readyState: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val readyState: StateFlow<Boolean> = _readyState.asStateFlow()
 
-    var billingClient: BillingClient? = null
-    var billingCallback: BillingCallback? = null
-    var lastSkuDetails: SkuDetails? = null
+    private var billingClient: BillingClient? = null
+    private var billingCallback: BillingCallback? = null
+    private var lastSkuDetails: SkuDetails? = null
 
     fun initialize(context: Context) {
         try {
-            val pendingParams = PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
             billingClient =
-                BillingClient.newBuilder(context).enablePendingPurchases(pendingParams).setListener(this).build()
+                BillingClient.newBuilder(context).enablePendingPurchases().setListener(this).build()
 
-            billingClient?.startConnection(object : BillingClientStateListener {
-                override fun onBillingSetupFinished(billingResult: BillingResult) {
-                    scope.launch {
-                        val params = QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.INAPP).build()
-                        billingClient?.queryPurchasesAsync(params) { a, b ->
-
-                        }
-                    }
-                }
-
-                override fun onBillingServiceDisconnected() {
-
-                }
-            })
+            billingClient?.startConnection(this)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     override fun onBillingServiceDisconnected() {
-
+        _readyState.update { false }
+        billingClient?.startConnection(this)
     }
 
-    override fun onBillingSetupFinished(p0: BillingResult) {
+    override fun onBillingSetupFinished(result: BillingResult) {
+        when (val responseCode = result.responseCode) {
+            BillingClient.BillingResponseCode.OK -> {
+                scope.launch {
+                    queryProducts(
+                        productType = BillingClient.ProductType.INAPP,
+                        productId = SINGLE_PROGRAM_ID,
+                    )
+                    queryPurchases(
+                        productType = BillingClient.ProductType.INAPP,
+                    )
+                    _readyState.update { true }
+                }
+            }
 
+            else -> {
+                Log.d("TestAlan", "onBillingSetupFinished - responseCode: $responseCode - failed case")
+                _readyState.update { false }
+            }
+        }
+    }
+
+    private suspend fun queryProducts(productType: String, productId: String) {
+        val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
+            .setProductList(
+                listOf(
+                    QueryProductDetailsParams.Product.newBuilder()
+                        .setProductId(productId)
+                        .setProductType(productType)
+                        .build()
+                )
+            )
+            .build()
+
+        val productDetailsResult: ProductDetailsResult? = withContext(Dispatchers.IO) {
+            billingClient?.queryProductDetails(queryProductDetailsParams)
+        }
+
+        val productDetailsList: List<ProductDetails>? = productDetailsResult?.productDetailsList
+
+        when (val responseCode = productDetailsResult?.billingResult?.responseCode) {
+            BillingClient.BillingResponseCode.OK -> {
+                Log.d("TestAlan", "queryProducts - result ok")
+                if (productDetailsList?.isNotEmpty() == true) {
+                    productDetailsList.forEach { productDetails ->
+                        printProductDetails(productDetails)
+                    }
+                }
+            }
+
+            else -> {
+                Log.d("TestAlan", "queryProducts - response is not ok ${responseCode?.toBillingMsg()}")
+                Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${productDetailsResult?.billingResult?.debugMessage}")
+            }
+        }
+    }
+
+    private fun printProductDetails(productDetails: ProductDetails) {
+        Log.d("TestAlan", "queryProducts - productDetails - productId: ${productDetails.productId} - productType: ${productDetails.productType} - title: ${productDetails.title} " +
+                "- description: $${productDetails.description} - oneTimePurchaseOfferDetails: ${productDetails.oneTimePurchaseOfferDetails}")
+    }
+
+    private suspend fun queryPurchases(productType: String) {
+        if (billingClient?.isReady == false) {
+            Log.d("TestAlan", "queryPurchases - billingClient is not ready")
+            return
+        }
+
+        val queryPurchaseParams = QueryPurchasesParams.newBuilder()
+            .setProductType(productType)
+            .build()
+
+        val result: PurchasesResult? = withContext(Dispatchers.IO) {
+            billingClient?.queryPurchasesAsync(queryPurchaseParams)
+        }
+
+        when (val responseCode = result?.billingResult?.responseCode) {
+            BillingClient.BillingResponseCode.OK -> {
+                Log.d("TestAlan", "queryPurchases - result ok")
+            }
+
+            else -> {
+                Log.d("TestAlan", "queryPurchases - response is not ok ${responseCode?.toBillingMsg()}")
+                Log.d("TestAlan", "queryPurchases - billingResult?.debugMessage ${result?.billingResult?.debugMessage}")
+            }
+        }
     }
 
     fun purchase(sku: String, activity: FragmentActivity, callback: BillingCallback) {
@@ -79,7 +162,38 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         billingClient?.querySkuDetailsAsync(
             params.build()
         ) { billingResult, detailsList ->
-            Log.d("BillingClient", billingResult.responseCode.toString())
+            Log.d("TestAlan", billingResult.responseCode.toString())
+            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && !detailsList.isNullOrEmpty()) {
+                val flowParams = BillingFlowParams.newBuilder()
+                    .setSkuDetails(detailsList.first())
+                    .build()
+                billingClient?.launchBillingFlow(activity, flowParams)
+                lastSkuDetails = detailsList.firstOrNull()
+            } else if (billingResult.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) {
+                billingCallback?.onFailure("Purchase failed. Please contact support for help")
+            }
+        }
+    }
+
+    fun purchase(productId: String, activity: Activity, callback: BillingCallback) {
+        billingCallback = callback
+
+        val productDetailsParamsList = listOf(
+            BillingFlowParams.ProductDetailsParams.newBuilder()
+                // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
+                .setProductDetails(productDetails)
+                // For One-time product, "setOfferToken" method shouldn't be called.
+                // For subscriptions, to get an offer token, call ProductDetails.subscriptionOfferDetails()
+                // for a list of offers that are available to the user
+                .setOfferToken(selectedOfferToken)
+                .build()
+        )
+
+
+        billingClient?.querySkuDetailsAsync(
+            params.build()
+        ) { billingResult, detailsList ->
+            Log.d("TestAlan", billingResult.responseCode.toString())
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && !detailsList.isNullOrEmpty()) {
                 val flowParams = BillingFlowParams.newBuilder()
                     .setSkuDetails(detailsList.first())
@@ -172,9 +286,16 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
                     if (!purchase.isAcknowledged) {
                         val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder()
                             .setPurchaseToken(purchase.purchaseToken).build()
-                        billingClient?.acknowledgePurchase(acknowledgePurchaseParams) { _result: BillingResult ->
-                            if (_result.responseCode == BillingClient.BillingResponseCode.OK) {
-                                billingCallback?.onSuccess(purchase)
+
+                        billingClient?.acknowledgePurchase(acknowledgePurchaseParams) { acknowledgeResult: BillingResult ->
+                            when (acknowledgeResult.responseCode) {
+                                BillingClient.BillingResponseCode.OK -> {
+                                    billingCallback?.onSuccess(purchase)
+                                }
+                                else -> {
+                                    // TODO: should try to acknowledge the purchase again
+//                                    billingCallback?.onFailure("User canceled purchase")
+                                }
                             }
                         }
                     } else {
@@ -194,6 +315,10 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         }
     }
 
+    fun dispose() {
+        billingClient?.endConnection()
+    }
+
     interface BillingCallback {
         fun onSuccess(purchase: Purchase)
         fun onFailure(message: String?)
@@ -202,26 +327,7 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
     companion object {
         val instance: BillingHelper by lazy { BillingHelper() }
 
-        const val SKU_SUB_SINGLE_PLAN = "com.ganbaru.method.3.month.subscription"
-        const val SKU_SUB_ALL_PROGRAMS = "com.ganbaru.method.3.yearly"
-        const val SKU_SUB_ALL_PROGRAMS_SALE = "com.ganbaru.method.2.subscription.all.programs.sale"
-        const val SKU_UNLIMITED_SALE = "com.ganbaru.method.full.access.sale"
-        const val SKU_UNLIMITED = "com.ganbaru.method.unlimited"
-        const val SKU_ANNUAL_TO_UNLIMITED = "com.ganbaru.method.2.upgrade.annual.to.lifetime"
-        const val SKU_MONTHLY_TO_UNLIMITED = "com.ganbaru.method.2.upgrade.monthly.to.lifetime"
-        const val SKU_MONTHLY_TO_ANNUAL = "com.ganbaru.method.2.upgrade.monthly.to.annual"
-        const val SKU_SUB_MONTH_PLAN = "com.ganbaru.method.3.month.subscription"
-        const val SKU_SUB_3MONTH_1W_FREE_PLAN = "com.ganbaru.method.3months.subscription"
-        const val SKU_SUB_TESTING = "com.ganbaru.method.internal.testing"
-
-        //the above is confusing, keep new separate, this is yearly
-        const val SKU_ANNUAL = "com.ganbaru.method.3.yearly"
-
-        //6 monthly
-        const val SKU_SIX_MONTHLY = "com.ganbaru.method.3.six.month.sub"
-
-        //this is monthly
-        const val SKU_MONTHLY = "com.ganbaru.method.3.month.subscription"
+        const val SINGLE_PROGRAM_ID = "com.vnhanh.testing.program.single"
 
         fun isSpringSale(): Boolean {
             val startDateStr = "26/11/2021" // "26/04/2021"
@@ -231,17 +337,6 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
             val maxDate = sdf.parse(endDateStr)
             val now = Date()
             return (now > minDate && now < maxDate)
-        }
-
-        fun getAllProgramsSku(): String {
-            if (isSpringSale()) {
-                return SKU_SUB_ALL_PROGRAMS_SALE
-            }
-            return SKU_SUB_ALL_PROGRAMS
-        }
-
-        fun getUnlimitedSku(): String {
-            return SKU_UNLIMITED
         }
     }
 }

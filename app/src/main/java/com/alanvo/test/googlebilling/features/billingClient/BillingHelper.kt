@@ -7,6 +7,7 @@ import android.widget.Toast
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
+import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.ProductDetailsResult
@@ -144,84 +145,89 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
         }
     }
 
-//    fun purchase(productType: String, productId: String, activity: Activity, callback: BillingCallback) {
-//        scope.launch {
-//            billingCallback = callback
-//            val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
-//                .setProductList(
-//                    listOf(
-//                        QueryProductDetailsParams.Product.newBuilder()
-//                            .setProductId(productId)
-//                            .setProductType(productType)
-//                            .build()
-//                    )
-//                )
-//                .build()
-//            Log.d("TestAlan", "purchase")
-//            billingClient?.queryProductDetailsAsync(queryProductDetailsParams) { billingResult: BillingResult, productDetailsList: MutableList<ProductDetails> ->
-//
-//                when (val responseCode = billingResult.responseCode) {
-//                    BillingClient.BillingResponseCode.OK -> {
-//                        Log.d("TestAlan", "queryProducts - result ok $productDetailsList")
-//                        if (productDetailsList.isNotEmpty()) {
-//                            val productDetailsParamsList = mutableListOf<BillingFlowParams.ProductDetailsParams>()
-//                            productDetailsList.forEach { productDetails ->
-//                                printProductDetails(productDetails)
-//
-//                                productDetailsParamsList.add(
-//                                    BillingFlowParams.ProductDetailsParams.newBuilder()
-//                                        // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
-//                                        .setProductDetails(productDetails)
-//                                        .build()
-//                                )
-//                            }
-//
-//                            val billingFlowParams = BillingFlowParams.newBuilder()
-//                                .setProductDetailsParamsList(productDetailsParamsList)
-//                                .build()
-//
-//                            billingClient?.launchBillingFlow(activity, billingFlowParams)
-//                        } else {
-//                            Log.d("TestAlan", "queryProducts - Can not get information of this purchase")
-//                            Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult.debugMessage}")
-//                        }
-//                    }
-//
-//                    else -> {
-//                        Log.d("TestAlan", "queryProducts - response is not ok ${responseCode.toBillingMsg()}")
-//                        Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult.debugMessage}")
-//                    }
-//                }
-//            }
-//        }
-//    }
-
-    fun purchase(productType: String, productId: String,  callback: BillingCallback) {
+    fun purchase(productType: String, productId: String, activity: Activity, callback: BillingCallback) {
         scope.launch {
             billingCallback = callback
-            val skuList: MutableList<String> = ArrayList()
-            skuList.add(productId)
-            val params = SkuDetailsParams.newBuilder()
-            params.setSkusList(skuList).setType(productType)
-            billingClient?.querySkuDetailsAsync(
-                params.build()
-            ) { billingResult1: BillingResult, skuDetailsList: List<SkuDetails>? ->
-                // Process the result.
-                if (billingResult1.responseCode == BillingClient.BillingResponseCode.OK && skuDetailsList != null) {
+            val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
+                .setProductList(
+                    listOf(
+                        QueryProductDetailsParams.Product.newBuilder()
+                            .setProductId(productId)
+                            .setProductType(productType)
+                            .build()
+                    )
+                )
+                .build()
+            Log.d("TestAlan", "purchase")
+            billingClient?.queryProductDetailsAsync(queryProductDetailsParams) { billingResult: BillingResult, productDetailsList: MutableList<ProductDetails> ->
+                scope.launch {
+                    when (val responseCode = billingResult.responseCode) {
+                        BillingClient.BillingResponseCode.OK -> {
+                            Log.d("TestAlan", "queryProducts - result ok $productDetailsList")
+                            if (productDetailsList.isNotEmpty()) {
+                                val productDetailsParamsList = mutableListOf<BillingFlowParams.ProductDetailsParams>()
+                                productDetailsList.forEach { productDetails ->
+                                    printProductDetails(productDetails)
+
+                                    productDetailsParamsList.add(
+                                        BillingFlowParams.ProductDetailsParams.newBuilder()
+                                            // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
+                                            .setProductDetails(productDetails)
+                                            .build()
+                                    )
+                                }
+
+                                val billingFlowParams = BillingFlowParams.newBuilder()
+                                    .setProductDetailsParamsList(productDetailsParamsList)
+                                    .build()
+
+                                withContext(Dispatchers.IO) {
+                                    billingClient?.launchBillingFlow(activity, billingFlowParams)
+
+                                }
+                            } else {
+                                Log.d("TestAlan", "queryProducts - Can not get information of this purchase")
+                                Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult.debugMessage}")
+                            }
+                        }
+
+                        else -> {
+                            Log.d("TestAlan", "queryProducts - response is not ok ${responseCode.toBillingMsg()}")
+                            Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult.debugMessage}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+//    fun purchase(productType: String, productId: String,  callback: BillingCallback) {
+//        scope.launch {
+//            billingCallback = callback
+//            Log.d("TestAlan", "is billing client ready ${billingClient?.isReady}")
+//            val skuList: MutableList<String> = ArrayList()
+//            skuList.add(productId)
+//            val params = SkuDetailsParams.newBuilder()
+//            params.setSkusList(skuList).setType(productType)
+//            billingClient?.querySkuDetailsAsync(
+//                params.build()
+//            ) { billingResult1: BillingResult, skuDetailsList: List<SkuDetails>? ->
+//                // Process the result.
+//                if (billingResult1.responseCode == BillingClient.BillingResponseCode.OK && skuDetailsList != null) {
 //                    for (skuDetailsObject in skuDetailsList) {
 //                        val skuDetails = skuDetailsObject as SkuDetails
 //                        val sku: String = skuDetails.getSku()
 //                        val price: String = skuDetails.getPrice()
 //
 //                    }
-                    Log.d("TestAlan", "queryProducts - result ok - list.size ${skuDetailsList.size}")
-                } else {
-                    Log.d("TestAlan", "queryProducts - response is not ok ${billingResult1.responseCode.toBillingMsg()}")
-                    Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult1.debugMessage}")
-                }
-            }
-        }
-    }
+//                    Log.d("TestAlan", "queryProducts - result ok - list.size ${skuDetailsList.size}")
+//                } else {
+//                    Log.d("TestAlan", "queryProducts - response is not ok ${billingResult1.responseCode.toBillingMsg()}")
+//                    Log.d("TestAlan", "queryProducts - billingResult?.debugMessage ${billingResult1.debugMessage}")
+//                }
+//            }
+//        }
+//    }
 
     private fun getPurchaseAcknowledged(purchase: Purchase, billingClient: BillingClient) {
         val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder()
@@ -284,7 +290,7 @@ class BillingHelper : PurchasesUpdatedListener, BillingClientStateListener {
     companion object {
         val instance: BillingHelper by lazy { BillingHelper() }
 
-        const val SINGLE_PROGRAM_ID = "com.alanvo.test.googlebilling.single.program"
+        const val SINGLE_PROGRAM_ID = "com.alanvo.test.googlebilling.single_program"
         const val SUBSCRIPTION_TYPE_01 = "com.alanvo.test.googlebilling.sub1"
     }
 }

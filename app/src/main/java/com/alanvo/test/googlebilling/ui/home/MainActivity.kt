@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
                         BillingHelper.instance.purchase(
                             productType = BillingClient.ProductType.INAPP,
                             productId = SINGLE_PROGRAM_ID,
+                            activity = this@MainActivity,
                             callback = billingCallback,
                         )
                     }
